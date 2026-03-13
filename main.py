@@ -9,7 +9,6 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import logging
 from datetime import datetime
 
-# লগিং কনফিগারেশন
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
@@ -29,9 +28,8 @@ class OTPMonitorBot:
         self.total_otps_sent = 0
         self.last_otp_time = None
         self.is_monitoring = True
-        self.session = requests.Session()  # Session অবজেক্ট - কুকি অটো সেভ হবে
-        
-        # OTP প্যাটার্ন ডিটেকশন
+        self.session = requests.Session()
+
         self.otp_patterns = [
             r'\b\d{3}-\d{3}\b',
             r'\b\d{5}\b',
@@ -45,15 +43,15 @@ class OTPMonitorBot:
             r'Telegram code \d+',
         ]
 
-    def get_captcha_answer(self):
-        """লগিন পেজ থেকে ক্যাপচা প্রশ্ন পড়ে উত্তর বের করুন"""
-        try:
-            login_page_url = f"http://{self.target_host}/signin"
-            response = self.session.get(login_page_url, timeout=10, verify=False)
-            html = response.text
-
-            # ক্যাপচা প্যাটার্ন: "What is X + Y = ?"
-            match = re.search(r'What is\s+(\d+)\s*\+\s*(\d+)', html)
+    def get_captcha_answer(self, html):
+        """HTML থেকে ক্যাপচা উত্তর বের করুন"""
+        patterns = [
+            r'What is\s+(\d+)\s*\+\s*(\d+)',
+            r'(\d+)\s*\+\s*(\d+)\s*=\s*\?',
+            r'(\d+)\s*\+\s*(\d+)\s*=',
+        ]
+        for pat in patterns:
+            match = re.search(pat, html, re.IGNORECASE)
             if match:
                 a = int(match.group(1))
                 b = int(match.group(2))
@@ -61,37 +59,67 @@ class OTPMonitorBot:
                 logger.info(f"🔢 Captcha: {a} + {b} = {answer}")
                 return answer
 
-            # বিকল্প প্যাটার্ন চেষ্টা
-            match2 = re.search(r'(\d+)\s*\+\s*(\d+)\s*=\s*\?', html)
-            if match2:
-                a = int(match2.group(1))
-                b = int(match2.group(2))
-                answer = a + b
-                logger.info(f"🔢 Captcha: {a} + {b} = {answer}")
-                return answer
-
-            logger.warning("⚠️ Captcha প্যাটার্ন পাওয়া যায়নি, default 16 ব্যবহার হচ্ছে")
-            return 16  # fallback
-
-        except Exception as e:
-            logger.error(f"❌ Captcha পড়তে সমস্যা: {e}")
-            return 16
+        logger.warning(f"⚠️ Captcha pattern পাওয়া যায়নি। HTML (first 600): {html[:600]}")
+        return 16
 
     def login(self):
         """Username ও Password দিয়ে লগিন করুন"""
         try:
-            login_url = f"http://{self.target_host}/signin"
+            # সম্ভাব্য login URL গুলো চেষ্টা
+            possible_urls = [
+                f"http://{self.target_host}/signin",
+                f"http://{self.target_host}/login",
+                f"http://{self.target_host}/ints/signin",
+                f"http://{self.target_host}/ints/login",
+                f"http://{self.target_host}/",
+            ]
 
-            # CSRF token থাকলে নেওয়া
-            login_page = self.session.get(login_url, timeout=10, verify=False)
+            login_page = None
+            login_url = None
+            for url in possible_urls:
+                try:
+                    resp = self.session.get(url, timeout=10, verify=False, allow_redirects=True)
+                    if resp.status_code == 200 and ('password' in resp.text.lower()):
+                        login_page = resp
+                        login_url = url
+                        logger.info(f"✅ Login page found: {url}")
+                        break
+                except Exception as e:
+                    logger.debug(f"URL {url} failed: {e}")
+                    continue
+
+            if not login_page:
+                logger.error("❌ কোনো login page পাওয়া যায়নি!")
+                return False
+
             html = login_page.text
 
+            # crlf hidden token
             crlf_value = ''
-            crlf_match = re.search(r"name='crlf'\s+value='([^']*)'", html)
+            crlf_match = re.search(r"name=['\"]crlf['\"]\s+value=['\"]([^'\"]*)['\"]", html)
+            if not crlf_match:
+                crlf_match = re.search(r"value=['\"]([^'\"]*)['\"][^>]*name=['\"]crlf['\"]", html)
             if crlf_match:
                 crlf_value = crlf_match.group(1)
+                logger.info(f"🔑 crlf token: {crlf_value}")
 
-            captcha_answer = self.get_captcha_answer()
+            # ক্যাপচা
+            captcha_answer = self.get_captcha_answer(html)
+
+            # Form action URL
+            action_match = re.search(r"<form[^>]+action=['\"]([^'\"]+)['\"]", html, re.IGNORECASE)
+            if action_match:
+                action = action_match.group(1)
+                if action.startswith('http'):
+                    post_url = action
+                elif action.startswith('/'):
+                    post_url = f"http://{self.target_host}{action}"
+                else:
+                    post_url = f"http://{self.target_host}/{action}"
+                logger.info(f"📋 Form POST URL: {post_url}")
+            else:
+                post_url = login_url
+                logger.warning("⚠️ Form action পাওয়া যায়নি, login_url ব্যবহার হচ্ছে")
 
             payload = {
                 'username': self.username,
@@ -104,12 +132,15 @@ class OTPMonitorBot:
                 'Host': self.target_host,
                 'Content-Type': 'application/x-www-form-urlencoded',
                 'Referer': login_url,
+                'Origin': f'http://{self.target_host}',
                 'User-Agent': 'Mozilla/5.0 (Linux; Android 16; 23129RN51X) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.120 Mobile Safari/537.36',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
             }
 
+            logger.info(f"📤 POST: {post_url} | user={self.username} | capt={captcha_answer}")
+
             response = self.session.post(
-                login_url,
+                post_url,
                 data=payload,
                 headers=headers,
                 timeout=10,
@@ -117,19 +148,20 @@ class OTPMonitorBot:
                 allow_redirects=True
             )
 
-            # লগিন সফল কিনা চেক
+            logger.info(f"📥 Response: {response.status_code} | URL: {response.url}")
+
             if response.status_code == 200:
-                if 'logout' in response.text.lower() or 'dashboard' in response.text.lower() or 'SMSCDRStats' in response.text:
+                resp_lower = response.text.lower()
+                if any(k in resp_lower for k in ['logout', 'dashboard', 'smscdr', 'signout']):
                     logger.info("✅ Login সফল হয়েছে!")
                     return True
-                elif 'invalid' in response.text.lower() or 'wrong' in response.text.lower():
-                    logger.error("❌ Login ব্যর্থ - username/password ভুল")
+                elif response.url != login_url and response.url != post_url:
+                    logger.info(f"✅ Login সফল (redirect → {response.url})")
+                    return True
+                elif any(k in resp_lower for k in ['invalid', 'wrong', 'incorrect', 'failed']):
+                    logger.error("❌ Login ব্যর্থ - username/password বা captcha ভুল")
                     return False
                 else:
-                    # redirect হলে সফল ধরুন
-                    if response.url != login_url:
-                        logger.info("✅ Login সফল (redirect হয়েছে)")
-                        return True
                     logger.warning("⚠️ Login অনিশ্চিত, চালিয়ে যাচ্ছি...")
                     return True
             else:
@@ -137,24 +169,21 @@ class OTPMonitorBot:
                 return False
 
         except Exception as e:
-            logger.error(f"❌ Login Error: {e}")
+            logger.error(f"❌ Login Exception: {e}")
             return False
 
     def hide_phone_number(self, phone_number):
-        """ফোন নম্বর হাইড করুন"""
         if len(phone_number) >= 8:
             return phone_number[:5] + '***' + phone_number[-4:]
         return phone_number
 
     def extract_operator_name(self, operator):
-        """অপারেটর নাম এক্সট্রাক্ট"""
         parts = operator.split()
         if parts:
             return parts[0]
         return operator
 
     async def send_telegram_message(self, message, chat_id=None, reply_markup=None):
-        """টেলিগ্রামে মেসেজ সেন্ড করুন"""
         if chat_id is None:
             chat_id = self.group_chat_id
         try:
@@ -175,7 +204,6 @@ class OTPMonitorBot:
             return False
 
     async def send_startup_message(self):
-        """স্টার্টআপ মেসেজ সেন্ড করুন"""
         startup_msg = f"""
 🚀 **ওটিপি মনিটর বট স্টার্ট হয়েছে** 🚀
 
@@ -205,11 +233,10 @@ class OTPMonitorBot:
         reply_markup = InlineKeyboardMarkup(keyboard)
         success = await self.send_telegram_message(startup_msg, reply_markup=reply_markup)
         if success:
-            logger.info("✅ Startup message sent to group")
+            logger.info("✅ Startup message sent")
         return success
 
     def extract_otp(self, message):
-        """মেসেজ থেকে OTP এক্সট্রাক্ট করুন"""
         for pattern in self.otp_patterns:
             matches = re.findall(pattern, message)
             if matches:
@@ -217,11 +244,9 @@ class OTPMonitorBot:
         return None
 
     def create_otp_id(self, timestamp, phone_number, message):
-        """ইউনিক OTP ID তৈরি করুন"""
         return f"{timestamp}_{phone_number}"
 
     def format_message(self, sms_data):
-        """SMS ডেটা ফরম্যাট করুন"""
         timestamp = sms_data[0]
         operator = sms_data[1]
         phone_number = sms_data[2]
@@ -250,7 +275,6 @@ class OTPMonitorBot:
         return formatted_msg
 
     def create_response_buttons(self):
-        """রেসপন্স বাটন তৈরি করুন"""
         keyboard = [
             [InlineKeyboardButton("📱 Number Channel", url="https://t.me/earning_hub_number_channel")],
             [
@@ -261,7 +285,6 @@ class OTPMonitorBot:
         return InlineKeyboardMarkup(keyboard)
 
     def fetch_sms_data(self):
-        """ওয়েবসাইট থেকে SMS ডেটা ফেচ করুন"""
         headers = {
             'Host': self.target_host,
             'Connection': 'keep-alive',
@@ -312,7 +335,7 @@ class OTPMonitorBot:
             )
 
             # Session expired হলে আবার login
-            if response.status_code == 401 or 'login' in response.url.lower():
+            if response.status_code in [401, 403] or ('login' in response.url.lower()):
                 logger.warning("⚠️ Session expired, re-logging in...")
                 if self.login():
                     response = self.session.get(
@@ -343,7 +366,6 @@ class OTPMonitorBot:
             return None
 
     async def monitor_loop(self):
-        """মেইন মনিটরিং লুপ"""
         logger.info("🔐 Username/Password দিয়ে Login করছি...")
 
         if not self.login():
@@ -393,7 +415,7 @@ class OTPMonitorBot:
                                     self.processed_otps.add(otp_id)
                                     self.total_otps_sent += 1
                                     self.last_otp_time = current_time
-                                    logger.info(f"✅ FIRST OTP SENT: {timestamp} - Total: {self.total_otps_sent}")
+                                    logger.info(f"✅ OTP SENT: {timestamp} - Total: {self.total_otps_sent}")
                                 else:
                                     logger.error(f"❌ Failed to send OTP: {timestamp}")
                         else:
@@ -404,7 +426,7 @@ class OTPMonitorBot:
                     logger.warning("⚠️ No data from API")
 
                 if check_count % 20 == 0:
-                    logger.info(f"📊 Status - Total First OTPs: {self.total_otps_sent}")
+                    logger.info(f"📊 Status - Total OTPs: {self.total_otps_sent}")
 
                 await asyncio.sleep(0.50)
 
@@ -416,11 +438,8 @@ class OTPMonitorBot:
 async def main():
     TELEGRAM_BOT_TOKEN = "8415686682:AAGAmUl69TEXQc0mn_sqe37LGT5FUX_e7KQ"
     GROUP_CHAT_ID = "-1003796890472"
-
-    # ✅ Username & Password (কুকি নেই)
     USERNAME = "moynulislam473"
     PASSWORD = "moynulislam473"
-
     TARGET_HOST = "93.190.143.157"
     TARGET_URL = f"http://{TARGET_HOST}/ints/client/res/data_smscdr.php"
 
@@ -429,9 +448,7 @@ async def main():
     print("=" * 50)
     print(f"👤 Username: {USERNAME}")
     print("⚡ Mode: FIRST OTP ONLY")
-    print("⏰ Check Interval: 0.50 SECONDS")
     print(f"📡 Host: {TARGET_HOST}")
-    print("📱 Group ID:", GROUP_CHAT_ID)
     print("🚀 Starting bot...")
 
     otp_bot = OTPMonitorBot(
@@ -443,9 +460,7 @@ async def main():
         target_host=TARGET_HOST
     )
 
-    print("✅ BOT STARTED SUCCESSFULLY!")
-    print("-" * 50)
-    print("🛑 Press Ctrl+C to stop the bot")
+    print("🛑 Press Ctrl+C to stop")
     print("=" * 50)
 
     try:
@@ -453,7 +468,7 @@ async def main():
     except KeyboardInterrupt:
         print("\n🛑 Bot stopped by user!")
         otp_bot.is_monitoring = False
-        print(f"📊 Final Stats - Total OTPs Sent: {otp_bot.total_otps_sent}")
+        print(f"📊 Total OTPs Sent: {otp_bot.total_otps_sent}")
         print("👋 Goodbye!")
 
 
