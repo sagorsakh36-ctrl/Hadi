@@ -23,21 +23,22 @@ class OTPMonitorBot:
         self.target_url = target_url
         self.target_host = target_host
         self.processed_otps = set()
-        self.processed_count = 0  # for memory management
+        self.processed_count = 0  # memory নিয়ন্ত্রণের জন্য
         self.start_time = datetime.now()
         self.total_otps_sent = 0
         self.last_otp_time = None
         self.is_monitoring = True
 
-        # OTP patterns — specific first, generic last
+        # OTP প্যাটার্ন — specific আগে, generic পরে
         self.otp_patterns = [
             r'#(\d{3}\s\d{3})',                # #209 658 (Instagram)
-            r'(?<!\d)(\d{3})\s(\d{3})(?!\d)',  # 209 658 with space
-            r'(?<!\d)(\d{3})-(\d{3})(?!\d)',   # 209-658 with dash
+            r'(?<!\d)(\d{3})\s(\d{3})(?!\d)',  # 209 658 স্পেস দিয়ে
+            r'(?<!\d)(\d{3})-(\d{3})(?!\d)',   # 209-658 dash দিয়ে
             r'code[:\s]+(\d{4,8})',             # code: 123456
-            r'(?<!\d)(\d{6})(?!\d)',            # 6 digits
-            r'(?<!\d)(\d{5})(?!\d)',            # 5 digits
-            r'(?<!\d)(\d{4})(?!\d)',            # 4 digits
+            r'কোড[:\s]+(\d{4,8})',              # বাংলা কোড
+            r'(?<!\d)(\d{6})(?!\d)',            # 6 ডিজিট
+            r'(?<!\d)(\d{5})(?!\d)',            # 5 ডিজিট
+            r'(?<!\d)(\d{4})(?!\d)',            # 4 ডিজিট
         ]
 
     def hide_phone_number(self, phone_number):
@@ -53,9 +54,9 @@ class OTPMonitorBot:
         return str(operator)
 
     def escape_markdown(self, text):
-        """Escape Markdown special characters to avoid Telegram errors"""
+        """Markdown special character escape করো যাতে Telegram error না দেয়"""
         text = str(text)
-        # Only escape backtick since we send inside backticks
+        # backtick-এর মধ্যে পাঠাব তাই শুধু backtick escape করলেই হবে
         return text.replace('`', "'")
 
     async def send_telegram_message(self, message, chat_id=None, reply_markup=None):
@@ -86,14 +87,14 @@ class OTPMonitorBot:
 
     async def send_startup_message(self):
         startup_msg = (
-            "🚀 *OTP Monitor Bot Started* 🚀\n\n"
+            "🚀 *ওটিপি মনিটর বট স্টার্ট হয়েছে* 🚀\n\n"
             "══════════════════\n\n"
-            "✅ *Status:* `Live & Monitoring`\n"
-            "⚡ *Mode:* `First OTP Only`\n"
-            f"📡 *Host:* `{self.target_host}`\n\n"
-            f"⏰ *Start Time:* `{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}`\n\n"
+            "✅ *স্টেটাস:* `লাইভ & মনিটরিং`\n"
+            "⚡ *মোড:* `ফার্স্ট ওটিপি অনলি`\n"
+            f"📡 *হোস্ট:* `{self.target_host}`\n\n"
+            f"⏰ *স্টার্ট টাইম:* `{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}`\n\n"
             "══════════════════\n"
-            "🤖 *OTP Monitor Bot is Running*"
+            "🤖 *ওটিপি মনিটর বট চলছে*"
         )
 
         keyboard = [
@@ -110,7 +111,7 @@ class OTPMonitorBot:
             logger.info(f"⚠️ Startup message failed (monitoring will continue): {e}")
 
     def extract_otp(self, message):
-        """Extract OTP from message — excluding timestamp/date"""
+        """মেসেজ থেকে OTP এক্সট্রাক্ট — timestamp/date বাদ দিয়ে"""
         cleaned = re.sub(r'\d{4}-\d{2}-\d{2}', '', str(message))
         cleaned = re.sub(r'\d{2}:\d{2}:\d{2}', '', cleaned)
 
@@ -123,8 +124,8 @@ class OTPMonitorBot:
                 return match
         return None
 
-    def create_otp_id(self, timestamp, phone_number):
-        return f"{timestamp}_{phone_number}"
+    def create_otp_id(self, timestamp, phone_number, otp_code=''):
+        return f"{timestamp}_{phone_number}_{otp_code}"
 
     def format_message(self, sms_data, message_text, otp_code):
         timestamp  = self.escape_markdown(sms_data[0])
@@ -135,16 +136,16 @@ class OTPMonitorBot:
         code       = self.escape_markdown(otp_code) if otp_code else 'N/A'
 
         return (
-            "🔥 *New OTP Detected* 🔥\n"
+            "🔥 *নতুন ওটিপি ডিটেক্টেড* 🔥\n"
             "══════════════════\n\n"
-            f"📅 *Time:* `{timestamp}`\n"
-            f"📱 *Number:* `{phone}`\n"
-            f"🏢 *Operator:* `{operator}`\n"
-            f"🌐 *Service:* `{service}`\n\n"
-            f"🎯 *OTP Code:* `{code}`\n\n"
-            f"📝 *Message:*\n`{msg}`\n\n"
+            f"📅 *টাইম:* `{timestamp}`\n"
+            f"📱 *নম্বর:* `{phone}`\n"
+            f"🏢 *অপারেটর:* `{operator}`\n"
+            f"🌐 *সার্ভিস:* `{service}`\n\n"
+            f"🎯 *ওটিপি কোড:* `{code}`\n\n"
+            f"📝 *মেসেজ:*\n`{msg}`\n\n"
             "══════════════════\n"
-            "🤖 *OTP Monitor Bot*"
+            "🤖 *ওটিপি মনিটর বট*"
         )
 
     def create_response_buttons(self):
@@ -257,12 +258,12 @@ class OTPMonitorBot:
                         timestamp = first_sms[0]
                         phone_number = str(first_sms[2])
 
-                        # skip index 0,1,2,3 — search OTP only from SMS body field
+                        # index 0,1,2,3 skip — শুধু SMS body field থেকে OTP খোঁজো
                         message_text = ""
                         otp_code = None
                         for i, field in enumerate(first_sms):
                             if i <= 3:
-                                continue  # skip timestamp, operator, phone, service
+                                continue  # timestamp, operator, phone, service skip
                             if isinstance(field, str) and len(field) > 3 and field.strip() not in ('$', '', '-'):
                                 found = self.extract_otp(field)
                                 if found:
@@ -275,7 +276,7 @@ class OTPMonitorBot:
                         if not message_text:
                             message_text = str(first_sms[5]) if len(first_sms) > 5 else ""
 
-                        otp_id = self.create_otp_id(timestamp, phone_number)
+                        otp_id = self.create_otp_id(timestamp, phone_number, otp_code or '')
 
                         if otp_id not in self.processed_otps:
                             logger.info(f"🚨 FIRST OTP DETECTED: {timestamp}")
@@ -291,7 +292,7 @@ class OTPMonitorBot:
                                     reply_markup=reply_markup
                                 )
 
-                                # add to processed whether success or fail
+                                # success বা fail যাই হোক processed-এ add করো
                                 self.processed_otps.add(otp_id)
                                 self.processed_count += 1
 
