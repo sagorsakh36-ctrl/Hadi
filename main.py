@@ -98,7 +98,7 @@ class OTPMonitorBot:
         )
 
         keyboard = [
-            [InlineKeyboardButton("👨‍💻 Developer", url="https://t.me/sadhin8miya")],
+            [InlineKeyboardButton("🌐 Number Bot", url="https://t.me/EARNING_HUB_NUMBER_BOT")],
             [InlineKeyboardButton("📢 Channel", url="https://t.me/earning_hub_official_channel")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -153,7 +153,7 @@ class OTPMonitorBot:
         keyboard = [
             [InlineKeyboardButton("📱 Number Channel", url="https://t.me/earning_hub_number_channel")],
             [
-                InlineKeyboardButton("👨‍💻 Developer", url="https://t.me/sadhin8miya"),
+                InlineKeyboardButton("🌐 Number Bot", url="https://t.me/EARNING_HUB_NUMBER_BOT"),
                 InlineKeyboardButton("📢 Channel", url="https://t.me/earning_hub_official_channel")
             ]
         ]
