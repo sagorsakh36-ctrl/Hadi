@@ -87,14 +87,14 @@ class OTPMonitorBot:
 
     async def send_startup_message(self):
         startup_msg = (
-            "🚀 *ওটিপি মনিটর বট স্টার্ট হয়েছে* 🚀\n\n"
-            "══════════════════\n\n"
-            "✅ *স্টেটাস:* `লাইভ & মনিটরিং`\n"
-            "⚡ *মোড:* `ফার্স্ট ওটিপি অনলি`\n"
-            f"📡 *হোস্ট:* `{self.target_host}`\n\n"
-            f"⏰ *স্টার্ট টাইম:* `{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}`\n\n"
-            "══════════════════\n"
-            "🤖 *ওটিপি মনিটর বট চলছে*"
+            "🚀 *𝐎𝐓𝐏 𝐌𝐨𝐧𝐢𝐭𝐨𝐫 𝐁𝐨𝐭 𝐒𝐭𝐚𝐫𝐭𝐞𝐝* 🚀\n\n"
+            "➖➖➖➖➖➖➖➖➖➖➖\n\n"
+            "✅ *𝐒𝐭𝐚𝐭𝐮𝐬:* `Live & Monitoring`\n"
+            "⚡ *𝐌𝐨𝐝𝐞:* `First OTP Only`\n"
+            f"📡 *𝐇𝐨𝐬𝐭:* `{self.target_host}`\n\n"
+            f"⏰ *𝐒𝐭𝐚𝐫𝐭 𝐓𝐢𝐦𝐞:* `{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}`\n\n"
+            "➖➖➖➖➖➖➖➖➖➖➖\n"
+            "🤖 *𝐎𝐓𝐏 𝐌𝐨𝐧𝐢𝐭𝐨𝐫 𝐁𝐨𝐭 𝐑𝐮𝐧𝐧𝐢𝐧𝐠*"
         )
 
         keyboard = [
@@ -132,20 +132,22 @@ class OTPMonitorBot:
         operator   = self.escape_markdown(self.extract_operator_name(sms_data[1]))
         phone      = self.escape_markdown(self.hide_phone_number(sms_data[2]))
         service    = self.escape_markdown(sms_data[3] if len(sms_data) > 3 else 'Unknown')
+        cost       = self.escape_markdown(sms_data[6] if len(sms_data) > 6 else '$')
         msg        = self.escape_markdown(message_text)
         code       = self.escape_markdown(otp_code) if otp_code else 'N/A'
 
         return (
-            "🔥 *নতুন ওটিপি ডিটেক্টেড* 🔥\n"
-            "══════════════════\n\n"
-            f"📅 *টাইম:* `{timestamp}`\n"
-            f"📱 *নম্বর:* `{phone}`\n"
-            f"🏢 *অপারেটর:* `{operator}`\n"
-            f"🌐 *সার্ভিস:* `{service}`\n\n"
-            f"🎯 *ওটিপি কোড:* `{code}`\n\n"
-            f"📝 *মেসেজ:*\n`{msg}`\n\n"
-            "══════════════════\n"
-            "🤖 *ওটিপি মনিটর বট*"
+            "🔥 *𝐅𝐈𝐑𝐒𝐓 𝐎𝐓𝐏 𝐑𝐄𝐂𝐄𝐈𝐕𝐄𝐃* 🔥\n"
+            "➖➖➖➖➖➖➖➖➖➖➖\n\n"
+            f"📅 *𝐓𝐢𝐦𝐞:* `{timestamp}`\n"
+            f"📱 *𝐍𝐮𝐦𝐛𝐞𝐫:* `{phone}`\n"
+            f"🏢 *𝐎𝐩𝐞𝐫𝐚𝐭𝐨𝐫:* `{operator}`\n"
+            f"📟 *𝐏𝐥𝐚𝐭𝐟𝐨𝐫𝐦:* `{service}`\n\n"
+            f"🟢 *𝐎𝐓𝐏 𝐂𝐨𝐝𝐞:* `{code}`\n\n"
+            f"💰 *𝐂𝐨𝐬𝐭:* `{cost}`\n\n"
+            f"📝 *𝐌𝐞𝐬𝐬𝐚𝐠𝐞:*\n`{msg}`\n\n"
+            "➖➖➖➖➖➖➖➖➖➖➖\n"
+            "🤖 *𝐎𝐓𝐏 𝐌𝐨𝐧𝐢𝐭𝐨𝐫 𝐁𝐨𝐭*"
         )
 
     def create_response_buttons(self):
